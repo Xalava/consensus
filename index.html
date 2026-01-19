@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Protocol Box</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Header / Toolbar -->
+    <header class="toolbar">
+      <div class="toolbar-left">
+        <h1 class="logo">DLT Consensus Sandbox</h1>
+        <span id="status-indicator" class="status-indicator paused">Paused</span>
+      </div>
+
+      <div class="toolbar-center">
+        <div class="control-group">
+          <button id="play-pause-btn" class="btn btn-primary">▶ Play</button>
+          <button id="reset-btn" class="btn">↻ Reset</button>
+        </div>
+
+        <div class="divider"></div>
+
+
+
+        <div class="control-group">
+          <label for="consensus-select">Consensus:</label>
+          <select id="consensus-select" class="select">
+            <option value="pow">Proof of Work</option>
+            <option value="pos">Proof of Stake</option>
+            <option value="raft">Raft</option>
+            <option value="pbft">PBFT</option>
+          </select>
+        </div>
+        
+        <span id="consensus-info" class="consensus-info">Mining race → Longest chain → Confirmation finality</span>
+        <div class="divider"></div>
+
+        <div class="control-group">
+          <label for="speed-slider">Speed:</label>
+          <input type="range" id="speed-slider" min="50" max="500" value="200" class="slider">
+          <span id="speed-value">0.5x</span>
+        </div>
+      </div>
+
+        <div class="toolbar-right">
+      </div>
+    </header>
+
+    <!-- Main Content -->
+    <main class="main-content">
+      <!-- Canvas Area -->
+      <div class="canvas-container">
+        <canvas id="simulation-canvas"></canvas>
+
+        <div id="controls" class="controls">
+
+          <div class="control-group">
+            <button id="add-node-btn" class="btn">+ Node</button>
+            <button id="add-wallet-btn" class="btn">+ Wallet </button>
+            <button id="connect-mode-btn" class="btn">🔗 Connect</button>
+          </div>
+        </div>
+
+        <!-- Instructions overlay -->
+        <div id="quickstart" class="instructions">
+          <button id="dismiss-quickstart-btn" class="quickstart-close" aria-label="Dismiss quickstart" title="Close">×</button>
+          <p><strong>Quick Start:</strong></p>
+          <p>• Double-click canvas to add nodes</p>
+          <p>• Click "Connect" then drag between entities</p>
+          <p>• Select wallet to send transactions</p>
+          <p>• Switch consensus modes to compare</p>
+        </div>
+      </div>
+
+      <!-- Inspector Panel -->
+      <aside class="inspector-container">
+        <div id="inspector-panel" class="inspector">
+          <div class="inspector-empty">
+            <p>Select a node or wallet to view details</p>
+            <p class="hint">Double-click canvas to add a node</p>
+          </div>
+        </div>
+      </aside>
+    </main>
+
+    <!-- Footer -->
+    <footer class="footer">
+      <span>Protocol Box Sandbox v0.1</span>
+      <span class="footer-divider">|</span>
+      <span>Educational visualization of distributed consensus protocols</span>
+    </footer>
+  </div>
+
+  <!-- Notification container -->
+  <div class="notification-container"></div>
+
+  <script type="module" src="src/main.js"></script>
+</body>
+</html>
