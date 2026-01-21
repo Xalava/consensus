@@ -110,7 +110,7 @@ export class PoSConsensus extends ConsensusEngine {
   handleTxGossip(node, msg, network) {
     const tx = Transaction.fromData(msg.payload.tx)
     if (node.addToMempool(tx)) {
-      network.broadcast(node.id, MessageType.TX_GOSSIP, { tx: tx.toJSON() })
+      network.broadcast(node.id, MessageType.TX_GOSSIP, { tx: tx.toJSON() }, msg.from)
     }
   }
 
@@ -158,8 +158,8 @@ export class PoSConsensus extends ConsensusEngine {
         this.castVote(node, block, network)
       }
 
-      // Re-gossip block
-      network.broadcast(node.id, MessageType.BLOCK_PROPOSE, { block: block.toJSON() })
+      // Re-gossip block (exclude the sender)
+      network.broadcast(node.id, MessageType.BLOCK_PROPOSE, { block: block.toJSON() }, msg.from)
     }
   }
 

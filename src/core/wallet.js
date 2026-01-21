@@ -2,7 +2,7 @@ import { generateKeyPair, addressFromPublicKey } from './crypto.js';
 import { Transaction } from './transaction.js';
 
 // Known user names for wallets
-const KNOWN_USERS = [
+export const KNOWN_USERS = [
   '',
   'Alice', 'Bob', 'Carmen', 'Denis', 'Emma',
   'Fatou', 'Gal', 'Hikari',

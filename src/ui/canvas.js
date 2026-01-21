@@ -104,9 +104,6 @@ export class CanvasRenderer {
     // Animation time (updated each frame)
     this.time = 0
 
-    // Wallet transaction messages (for visualization)
-    this.walletMessages = []
-
     // Setup event listeners
     this.setupEvents()
 
@@ -122,31 +119,6 @@ export class CanvasRenderer {
     this.height = height
     this.canvas.width = width
     this.canvas.height = height
-  }
-
-  // Add a wallet transaction message for visualization
-  addWalletMessage(walletId, nodeId) {
-    const wallet = this.simulation.wallets.get(walletId)
-    const node = this.simulation.nodes.get(nodeId)
-    if (!wallet || !node) return
-
-    this.walletMessages.push({
-      walletId,
-      nodeId,
-      createdAt: Date.now(),
-      duration: 1500, // Wallet to node animation duration
-      progress: 0
-    })
-  }
-
-  // Update wallet messages progress
-  updateWalletMessages() {
-    const now = Date.now()
-    this.walletMessages = this.walletMessages.filter(msg => {
-      const elapsed = now - msg.createdAt
-      msg.progress = Math.min(1, elapsed / msg.duration)
-      return msg.progress < 1
-    })
   }
 
   setupEvents() {
@@ -290,9 +262,6 @@ export class CanvasRenderer {
     const state = this.simulation.getState()
     this.time = performance.now()
 
-    // Update wallet messages
-    this.updateWalletMessages()
-
     // Clear canvas with gradient background
     const bgGradient = ctx.createLinearGradient(0, 0, 0, this.height)
     bgGradient.addColorStop(0, '#0F172A')
@@ -347,8 +316,8 @@ export class CanvasRenderer {
     const ctx = this.ctx
     ctx.strokeStyle = this.colors.grid
     ctx.lineWidth = 1
-    
-    const gridSize = 40
+
+    const gridSize = 80
     
     for (let x = 0; x < this.width; x += gridSize) {
       ctx.beginPath()
@@ -418,15 +387,20 @@ export class CanvasRenderer {
 
   drawMessages(state) {
     const ctx = this.ctx
-    
+    const now = Date.now()
+
     for (const msg of state.messages) {
       const from = state.nodes.find(n => n.id === msg.from)
       const to = state.nodes.find(n => n.id === msg.to)
-      
+
       if (!from || !to) continue
-      
-      const x = from.x + (to.x - from.x) * msg.progress
-      const y = from.y + (to.y - from.y) * msg.progress
+
+      // Calculate smooth progress in real-time for smooth animation
+      const elapsed = now - msg.createdAt
+      const progress = Math.min(1, elapsed / msg.totalDelay)
+
+      const x = from.x + (to.x - from.x) * progress
+      const y = from.y + (to.y - from.y) * progress
       
       const color = this.colors.message[msg.type] || this.colors.message.default
       const size = this.getMessageSize(msg.type)
@@ -441,25 +415,33 @@ export class CanvasRenderer {
       ctx.stroke()
       ctx.globalAlpha = 1
       
-      // Draw glow
-      ctx.beginPath()
-      ctx.arc(x, y, size + 4, 0, Math.PI * 2)
-      ctx.fillStyle = color
-      ctx.globalAlpha = 0.3
-      ctx.fill()
-      ctx.globalAlpha = 1
       
-      // Draw message packet
+
+      
+      if (msg.type.includes('BLOCK_PROPOSE') || msg.type.includes('APPEND') || msg.type.includes('PRE_PREPARE')) {
+              // Draw message packet
+      ctx.fillStyle = color
+      ctx.strokeStyle = '#FFFFFF'
+      ctx.lineWidth = 2
+            ctx.beginPath()
+
+        // Rounded square for blocks/entries
+        const s = size
+        ctx.roundRect(x - s/2, y - s/2, s, s, 3)
+      } else {
+        // Draw glow
+        ctx.beginPath()
+        ctx.arc(x, y, size + 4, 0, Math.PI * 2)
+        ctx.fillStyle = color
+        ctx.globalAlpha = 0.3
+        ctx.fill()
+        ctx.globalAlpha = 1
+       // Draw message packet
       ctx.fillStyle = color
       ctx.strokeStyle = '#FFFFFF'
       ctx.lineWidth = 2
       
       ctx.beginPath()
-      if (msg.type.includes('BLOCK') || msg.type.includes('APPEND') || msg.type.includes('PRE_PREPARE')) {
-        // Rounded square for blocks/entries
-        const s = size
-        ctx.roundRect(x - s/2, y - s/2, s, s, 3)
-      } else {
         // Circle for other messages
         ctx.arc(x, y, size/2, 0, Math.PI * 2)
       }
@@ -478,15 +460,25 @@ export class CanvasRenderer {
 
   drawWalletMessages(state) {
     const ctx = this.ctx
+    const now = Date.now()
 
-    for (const msg of this.walletMessages) {
-      const wallet = state.wallets.find(w => w.id === msg.walletId)
-      const node = state.nodes.find(n => n.id === msg.nodeId)
+    // Filter network messages for wallet transactions
+    const walletTxMessages = this.simulation.network.messages.filter(
+      msg => msg.type === 'WALLET_TX'
+    )
+
+    for (const msg of walletTxMessages) {
+      const wallet = state.wallets.find(w => w.id === msg.from)
+      const node = state.nodes.find(n => n.id === msg.to)
 
       if (!wallet || !node) continue
 
-      const x = wallet.x + (node.x - wallet.x) * msg.progress
-      const y = wallet.y + (node.y - wallet.y) * msg.progress
+      // Calculate smooth progress in real-time for smooth animation
+      const elapsed = now - msg.createdAt
+      const progress = Math.min(1, elapsed / msg.totalDelay)
+
+      const x = wallet.x + (node.x - wallet.x) * progress
+      const y = wallet.y + (node.y - wallet.y) * progress
 
       const color = this.colors.message.TX_GOSSIP
       const size = 10
@@ -561,8 +553,8 @@ export class CanvasRenderer {
       ctx.stroke()
       ctx.globalAlpha = 1
 
-      // Spinning dot - speed based on hashPower (one rotation every 4-8 seconds)
-      const rotationPeriod = 8000 - (hashPower / 24) * 4000 // 4000-8000ms
+      // Spinning dot - speed based on hashPower 
+      const rotationPeriod = 10000 - (hashPower / 12 )* 9000
       const angle = ((this.time % rotationPeriod) / rotationPeriod) * Math.PI * 2 - Math.PI / 2
       const dotX = node.x + Math.cos(angle) * ringRadius
       const dotY = node.y + Math.sin(angle) * ringRadius

@@ -2,6 +2,9 @@ import { generateId } from '../core/crypto.js'
 
 // Message types
 export const MessageType = {
+  // Wallet to node
+  WALLET_TX: 'WALLET_TX',
+
   // Common
   TX_GOSSIP: 'TX_GOSSIP',
   BLOCK_PROPOSE: 'BLOCK_PROPOSE',

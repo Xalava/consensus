@@ -59,13 +59,31 @@ export class Inspector {
     const headBlock = node.getHead()
     const finalizedBlock = node.getFinalized()
 
-    // Get recent blocks (walk back from head, max 5)
-    const recentBlocks = []
-    let currentBlock = headBlock
-    while (currentBlock && recentBlocks.length < 5 && currentBlock.height > 0) {
-      recentBlocks.push(currentBlock)
-      currentBlock = node.getBlock(currentBlock.parentId)
+    // Build main chain set (for identifying orphans)
+    const mainChainIds = new Set()
+    let walkBlock = headBlock
+    while (walkBlock && walkBlock.height > 0) {
+      mainChainIds.add(walkBlock.id)
+      walkBlock = node.getBlock(walkBlock.parentId)
     }
+
+    // Group all blocks by height (excluding genesis), max 1 orphan per height
+    const blocksByHeight = new Map()
+    for (const [blockId, block] of node.blockStore) {
+      if (block.height === 0) continue
+      if (!blocksByHeight.has(block.height)) {
+        blocksByHeight.set(block.height, { main: null, orphan: null })
+      }
+      const entry = blocksByHeight.get(block.height)
+      if (mainChainIds.has(blockId)) {
+        entry.main = block
+      } else if (!entry.orphan) {
+        entry.orphan = block  // Keep only first orphan
+      }
+    }
+
+    // Get top 5 heights, sorted descending
+    const heights = Array.from(blocksByHeight.keys()).sort((a, b) => b - a).slice(0, 5)
     
     let consensusPanel = ''
     
@@ -103,7 +121,7 @@ export class Inspector {
           </div>
           <div class="stat-row">
             <span class="stat-label">Head Block:</span>
-            <span class="stat-value mono">${headBlock?.id.slice(0, 8) || 'genesis'}</span>
+            <span class="stat-value mono">${headBlock?.id || 'genesis'}</span>
           </div>
         </div>
 
@@ -114,7 +132,7 @@ export class Inspector {
           <div class="tx-list">
             ${mempoolTxs.length > 0 ? mempoolTxs.map(tx => `
               <div class="tx-item pending">
-                <span class="tx-id">${tx.id.slice(0, 8)}</span>
+                <span class="tx-id">${tx.id}</span>
                 <span class="tx-amount">${tx.amount}</span>
                 <span class="tx-state">PENDING</span>
               </div>
@@ -124,23 +142,22 @@ export class Inspector {
 
         <div class="inspector-section">
           <h4>📦 Recent Blocks</h4>
-          <div class="block-list compact">
-            ${recentBlocks.length > 0 ? recentBlocks.map(block => {
-              const isFinalized = block.height <= nodeState.finalizedHeight
-              const status = isFinalized ? 'finalized' : 'pending'
-              const txCount = block.transactions?.length || block.txIds?.length || 0
-              const txSummary = (block.transactions || []).map(tx =>
-                `${tx.from?.slice(0, 6) || '?'} → ${tx.to?.slice(0, 6) || '?'}: ${tx.amount}`
-              ).join('\n')
-              const tooltip = `Producer: ${block.producerId}\nTransactions: ${txCount}${txSummary ? '\n' + txSummary : ''}`
-              return `
-                <div class="block-item-compact ${status}" title="${tooltip.replace(/"/g, '&quot;')}">
-                  <span class="block-height">#${block.height}</span>
-                  <span class="block-id mono">${block.id.slice(0, 6)}</span>
-                  <span class="block-txs">${txCount}tx</span>
-                  <span class="block-status ${status}">${isFinalized ? '✓' : '⏳'}</span>
-                </div>
-              `
+          <div class="block-list-rows">
+            ${heights.length > 0 ? heights.map(height => {
+              const { main, orphan } = blocksByHeight.get(height)
+              const isFinalized = height <= nodeState.finalizedHeight
+
+              const renderChip = (block, isOrphan) => {
+                if (!block) return ''
+                const txCount = block.transactions?.length || block.txIds?.length || 0
+                const status = isOrphan ? 'orphan' : (isFinalized ? 'finalized' : 'unconfirmed')
+                const icon = isOrphan ? '✗' : (isFinalized ? '✓' : '⏳')
+                const txList = (block.transactions || []).map(tx => '• '+ tx.id + '\n   ('+tx.from.slice(0,6)+ '→' + tx.to.slice(0,6) + ': ' + tx.amount + ')').join('\n')
+                const tooltip = 'ID: ' + block.id + '&#10;Producer: ' + block.producerId + '&#10;Status: ' + status + '&#10;Txs: ' + '\n'+ (txList ? txList : '') + '&#10;Parent: ' + block.parentId.slice(0,8)
+                return '<span class="block-chip ' + status + '" title="' + tooltip + '">' + block.id.slice(0, 8) + ' ' + icon + '</span>'
+              }
+
+              return '<div class="block-row"><span class="block-height">#' + height + '</span><div class="block-chips">' + renderChip(main, false) + renderChip(orphan, true) + '</div></div>'
             }).join('') : '<div class="empty">No blocks yet</div>'}
           </div>
         </div>
@@ -173,6 +190,8 @@ export class Inspector {
     return `
       <div class="inspector-section consensus-panel">
         <h4>⛏️ Proof of Work</h4>
+
+        <h5>Node status</h5>
         <div class="stat-row">
           <span class="stat-label">Mining:</span>
           <label class="switch">
@@ -188,6 +207,8 @@ export class Inspector {
           <span class="stat-label">Hash Power:</span>
           <span class="stat-value mono">${state.hashPower}</span>
         </div>
+
+        <h5>Global parameters</h5>
         <div class="stat-row">
           <span class="stat-label">Difficulty:</span>
           <span class="stat-value">${state.difficulty}</span>
@@ -426,7 +447,6 @@ export class Inspector {
               <div class="form-group">
                 <label>To:</label>
                 <select id="tx-to" required>
-                  <option value="">Select recipient...</option>
                   ${otherAddresses.map(a => `
                     <option value="${a.address}">${a.name} (${a.address})</option>
                   `).join('')}

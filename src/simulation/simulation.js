@@ -10,21 +10,34 @@ export class Simulation {
     this.network = new Network()
     this.nodes = new Map()
     this.wallets = new Map()
-    
+
+    // Handle wallet transaction delivery from network
+    this.network.onWalletTxDelivery = (tx, nodeId) => {
+      const node = this.nodes.get(nodeId)
+      if (node && this.consensus) {
+        this.consensus.onTx(node, tx, this.network)
+      }
+    }
+
     // Consensus engine (shared across all nodes)
     this.consensus = null
     this.consensusType = 'pow'
-    
+
     // Simulation state
     this.running = false
-    this.tickInterval = 200  // ms between ticks (slower default)
     this.tickTimer = null
     this.startTime = 0
-    
+
+    // Speed control - base values at 1x speed
+    this.speedMultiplier = 1.0
+    this.baseTickInterval = 500   // ms between ticks at 1x
+    this.baseNetworkMinDelay = 1000  // min network delay at 1x
+    this.baseNetworkMaxDelay = 2000  // max network delay at 1x
+
     // Counters for ID generation
     this.nodeCounter = 0
     this.walletCounter = 0
-    
+
     // Event callbacks
     this.onTick = null
     this.onNodeAdded = null
@@ -32,6 +45,7 @@ export class Simulation {
     this.onConnectionAdded = null
     this.onMessageCreated = null
     this.onMessageDelivered = null
+    this.onBlockMined = null  // Called when a node mines/proposes a block
   }
 
   // Initialize with a consensus type
@@ -196,17 +210,15 @@ export class Simulation {
   sendTransaction(walletId, toAddress, amount) {
     const wallet = this.wallets.get(walletId)
     if (!wallet) return null
-    
+
     const node = this.nodes.get(wallet.connectedNodeId)
     if (!node) return null
-    
+
     // Create transaction
     const tx = wallet.createTransaction(toAddress, amount)
-    
-    // Submit to connected node
-    if (this.consensus) {
-      this.consensus.onTx(node, tx, this.network)
-    }
+
+    // Queue for delivery via network (respects network delay)
+    this.network.sendWalletTx(walletId, wallet.connectedNodeId, tx)
 
     return tx
   }
@@ -214,13 +226,19 @@ export class Simulation {
   // Start simulation
   start() {
     if (this.running) return
-    
+
     this.running = true
     this.startTime = Date.now()
-    
+
+    const interval = this.getTickInterval()
     this.tickTimer = setInterval(() => {
       this.tick()
-    }, this.tickInterval)
+    }, interval)
+  }
+
+  // Get current tick interval based on speed
+  getTickInterval() {
+    return Math.round(this.baseTickInterval / this.speedMultiplier)
   }
 
   // Pause simulation
@@ -245,14 +263,25 @@ export class Simulation {
   // Perform one simulation tick
   tick() {
     const now = Date.now()
-    
+
     // Deliver messages
     this.network.tick(now)
-    
+
     // Tick each node's consensus
     if (this.consensus) {
       for (const [_, node] of this.nodes) {
+        // Track head before tick to detect new blocks
+        const headBefore = node.headId
+
         this.consensus.onTick(node, now, this.network)
+
+        // Check if this node mined/proposed a new block
+        if (node.headId !== headBefore && this.onBlockMined) {
+          const block = node.getHead()
+          if (block && block.producerId === node.id) {
+            this.onBlockMined(node, block)
+          }
+        }
       }
     }
 
@@ -347,15 +376,21 @@ export class Simulation {
     this.network.maxDelay = max
   }
 
-  // Set tick interval (simulation speed)
-  setTickInterval(ms) {
-    this.tickInterval = ms
+  // Set speed multiplier (affects tick interval and network delays)
+  setSpeedMultiplier(multiplier) {
+    this.speedMultiplier = Math.max(0.1, Math.min(5, multiplier))
+
+    // Update network delays
+    this.network.minDelay = Math.round(this.baseNetworkMinDelay / this.speedMultiplier)
+    this.network.maxDelay = Math.round(this.baseNetworkMaxDelay / this.speedMultiplier)
+
     // Restart timer if running
     if (this.running) {
       clearInterval(this.tickTimer)
+      const interval = this.getTickInterval()
       this.tickTimer = setInterval(() => {
         this.tick()
-      }, this.tickInterval)
+      }, interval)
     }
   }
 

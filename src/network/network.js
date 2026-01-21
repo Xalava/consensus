@@ -1,4 +1,4 @@
-import { Message } from './message.js'
+import { Message, MessageType } from './message.js'
 
 export class Network {
   constructor() {
@@ -17,6 +17,9 @@ export class Network {
     this.onMessageCreated = null
     this.onMessageDelivered = null
     this.onMessageDropped = null
+
+    // Callback for wallet transaction delivery
+    this.onWalletTxDelivery = null
   }
 
   // Register a node
@@ -68,12 +71,13 @@ export class Network {
   }
 
   // Broadcast message to all peers of a node
-  broadcast(fromId, type, payload) {
+  broadcast(fromId, type, payload, excludeId = null) {
     const fromNode = this.nodes.get(fromId)
     if (!fromNode) return []
 
     const messages = []
     for (const peerId of fromNode.peers) {
+      if (peerId === excludeId) continue  // Don't send back to the sender
       const msg = this.send(fromId, peerId, type, payload)
       if (msg) messages.push(msg)
     }
@@ -93,6 +97,21 @@ export class Network {
     return messages
   }
 
+  // Send a transaction from a wallet to a node
+  sendWalletTx(walletId, nodeId, tx) {
+    const msg = Message.create(MessageType.WALLET_TX, walletId, nodeId, { tx })
+    const delay = this.getDelay()
+    msg.deliverAt = Date.now() + delay
+    msg.totalDelay = delay
+    this.messages.push(msg)
+
+    if (this.onMessageCreated) {
+      this.onMessageCreated(msg)
+    }
+
+    return msg
+  }
+
   // Process messages due for delivery
   tick(now) {
     const delivered = []
@@ -104,10 +123,18 @@ export class Network {
       msg.progress = Math.min(1, elapsed / msg.totalDelay)
       
       if (now >= msg.deliverAt) {
-        // Deliver message
-        const node = this.nodes.get(msg.to)
-        if (node && node.consensus) {
-          node.consensus.onMessage(node, msg, this)
+        // Deliver message based on type
+        if (msg.type === MessageType.WALLET_TX) {
+          // Wallet transaction - use callback
+          if (this.onWalletTxDelivery) {
+            this.onWalletTxDelivery(msg.payload.tx, msg.to)
+          }
+        } else {
+          // Node-to-node message - deliver to consensus
+          const node = this.nodes.get(msg.to)
+          if (node && node.consensus) {
+            node.consensus.onMessage(node, msg, this)
+          }
         }
 
         if (this.onMessageDelivered) {
@@ -142,7 +169,9 @@ export class Network {
       from: msg.from,
       to: msg.to,
       progress: msg.progress,
-      payload: msg.payload
+      payload: msg.payload,
+      createdAt: msg.createdAt,
+      totalDelay: msg.totalDelay
     }))
   }
 }

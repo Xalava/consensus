@@ -1,7 +1,3 @@
-/**
- * DLT Consensus Sandbox - Main Application Entry Point
- */
-
 import { Simulation } from './simulation/simulation.js'
 import { CanvasRenderer } from './ui/canvas.js'
 import { Inspector } from './ui/inspector.js'
@@ -26,14 +22,14 @@ class App {
   }
 
   init() {
-    console.log('🚀 Protocol Box initializing...')
+    console.log('🚀 Consensus SandBox initializing...')
     
     // Get DOM elements
     this.elements = {
       canvas: document.getElementById('simulation-canvas'),
       inspector: document.getElementById('inspector-panel'),
       quickstart: document.getElementById('quickstart'),
-      playPauseBtn: document.getElementById('play-pause-btn'),
+      // playPauseBtn: document.getElementById('play-pause-btn'),
       resetBtn: document.getElementById('reset-btn'),
       addNodeBtn: document.getElementById('add-node-btn'),
       addWalletBtn: document.getElementById('add-wallet-btn'),
@@ -43,7 +39,6 @@ class App {
       speedSlider: document.getElementById('speed-slider'),
       speedValue: document.getElementById('speed-value'),
       statusIndicator: document.getElementById('status-indicator'),
-      consensusInfo: document.getElementById('consensus-info')
     }
     
     // Setup canvas
@@ -66,9 +61,9 @@ class App {
 
     // Auto-start simulation
     this.simulation.start()
-    this.updatePlayPauseButton(true)
+    this.updatePlayPauseStatus(true)
 
-    console.log('✅ Protocol Box ready!')
+    console.log('✅ Consensus SandBox ready!')
   }
 
   setupCanvas() {
@@ -117,12 +112,14 @@ class App {
   setupInspector() {
     this.inspector = new Inspector(this.elements.inspector, this.simulation)
 
-    this.inspector.onSendTransaction = (tx, walletId, nodeId) => {
-      // Visualize the transaction leaving the wallet
-      if (walletId && nodeId) {
-        this.renderer.addWalletMessage(walletId, nodeId)
-      }
-      this.showNotification(`Transaction ${tx.id.slice(0, 8)}... sent!`)
+    // Block mined notification
+    this.simulation.onBlockMined = (node, block) => {
+      const txCount = block.transactions?.length || 0
+      this.showNotification(`⛏️ ${node.name} mined block #${block.height}`)
+    }
+
+    this.inspector.onSendTransaction = (tx) => {
+      this.showNotification(`Transaction ${tx.id.slice(0, 8)} sent!`)
     }
 
     this.inspector.onDeleteNode = (nodeId) => {
@@ -161,17 +158,17 @@ class App {
 
   setupControls() {
     // Play/Pause button
-    this.elements.playPauseBtn?.addEventListener('click', () => {
-      const running = this.simulation.toggle()
-      this.updatePlayPauseButton(running)
-    })
+    // this.elements.playPauseBtn?.addEventListener('click', () => {
+    //   const running = this.simulation.toggle()
+    //   this.updatePlayPauseStatus(running)
+    // })
     
     // Reset button
     this.elements.resetBtn?.addEventListener('click', () => {
       this.simulation.reset()
       this.createInitialNetwork()
       this.inspector.setSelected(null)
-      this.updatePlayPauseButton(false)
+      this.updatePlayPauseStatus(false)
     })
     
     // Add Node button
@@ -203,14 +200,14 @@ class App {
       this.changeConsensus(type)
     })
 
-    // Speed slider (controls tick interval)
+    // Speed slider 
     this.elements.speedSlider?.addEventListener('input', (e) => {
       const value = parseInt(e.target.value)
-      this.simulation.setTickInterval(value)
-      // Display as speed multiplier (100ms = 1x, 50ms = 2x, 200ms = 0.5x)
-      const speedMultiplier = (100 / value).toFixed(1)
+      // Convert slider value to speed multiplier: 200 = 1x, 500 = 2.5x, 50 = 0.25x
+      const speedMultiplier = value / 200
+      this.simulation.setSpeedMultiplier(speedMultiplier)
       if (this.elements.speedValue) {
-        this.elements.speedValue.textContent = `${speedMultiplier}x`
+        this.elements.speedValue.textContent = `${speedMultiplier.toFixed(1)}x`
       }
     })
     
@@ -219,7 +216,6 @@ class App {
       const quickstartEl = this.elements.quickstart || document.getElementById('quickstart')
       if (quickstartEl) {
         quickstartEl.remove()
-        this.showNotification('Quickstart dismissed')
       }
     })
   }
@@ -259,12 +255,12 @@ class App {
     info.textContent = descriptions[type] || ''
   }
 
-  updatePlayPauseButton(running) {
-    const btn = this.elements.playPauseBtn
-    if (!btn) return
+  updatePlayPauseStatus(running) {
+    // const btn = this.elements.playPauseBtn
+    // if (!btn) return
     
-    btn.textContent = running ? '⏸ Pause' : '▶ Play'
-    btn.classList.toggle('running', running)
+    // btn.textContent = running ? '⏸ Pause' : '▶ Play'
+    // btn.classList.toggle('running', running)
     
     if (this.elements.statusIndicator) {
       this.elements.statusIndicator.className = `status-indicator ${running ? 'running' : 'paused'}`
@@ -311,8 +307,13 @@ class App {
       node.ledger.setBalance(wallet2.address, wallet2.initialBalance)
     }
 
-    // Set initial network delay (default: 1000ms with 1500ms max)
-    this.simulation.setNetworkDelay(1000, 1500)
+    // Set initial speed (1x at slider default of 200)
+    const initialSliderValue = parseInt(this.elements.speedSlider?.value || 200)
+    const initialSpeed = initialSliderValue / 200
+    this.simulation.setSpeedMultiplier(initialSpeed)
+    if (this.elements.speedValue) {
+      this.elements.speedValue.textContent = `${initialSpeed.toFixed(1)}x`
+    }
 
     // Update consensus info
     this.updateConsensusInfo(this.simulation.consensusType)

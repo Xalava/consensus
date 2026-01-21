@@ -31,7 +31,7 @@ export class PoWConsensus extends ConsensusEngine {
     // Node-specific state - randomize starting nonce so different nodes find blocks
     node.consensusState = {
       mining: true,           // Whether this node is mining
-      hashPower: Math.floor(Math.random() * 20) + 5, // Number of hash attempts per tick (5-24)
+      hashPower: Math.floor(Math.random() * 12) + 1, // Number of hash attempts per tick 
       nativeNonce: Math.floor(Math.random() * 1000), // entropy to ensure different starting points, constant
       currentNonce: 0,
       miningHeight: 1,        // Height currently mining at
@@ -46,10 +46,8 @@ export class PoWConsensus extends ConsensusEngine {
   onTx(node, tx, network) {
     // Add to mempool
     if (node.addToMempool(tx)) {
-      // Gossip to peers
-      setTimeout(() => {
-        network.broadcast(node.id, MessageType.TX_GOSSIP, { tx: tx.toJSON() })
-      }, network.getDelay())
+      // Gossip to peers (network handles transmission delay)
+      network.broadcast(node.id, MessageType.TX_GOSSIP, { tx: tx.toJSON() })
       return
     }
   }
@@ -73,9 +71,7 @@ export class PoWConsensus extends ConsensusEngine {
 
     // Add to mempool and re-gossip if new
     if (node.addToMempool(tx)) {
-      setTimeout(() => {
-        network.broadcast(node.id, MessageType.TX_GOSSIP, { tx: tx.toJSON() })
-      }, network.getDelay())
+      network.broadcast(node.id, MessageType.TX_GOSSIP, { tx: tx.toJSON() }, msg.from)
     }
   }
 
@@ -85,13 +81,13 @@ export class PoWConsensus extends ConsensusEngine {
 
     // Validate PoW
     if (!this.isValidPoW(block)) {
-      console.log(`Node ${node.id}: Invalid PoW for block ${block.shortId()}`)
+      console.log(`${node.id}: Invalid PoW for block ${block.shortId()}`)
       return
     }
 
     // Check if we have the parent
     if (!node.blockStore.has(block.parentId)) {
-      console.log(`Node ${node.id}: Missing parent ${block.parentId.slice(0, 8)} for block ${block.shortId()}`)
+      console.log(`${node.id}: Missing parent ${block.parentId.slice(0, 8)} for block ${block.shortId()}`)
       return
     }
 
@@ -99,8 +95,22 @@ export class PoWConsensus extends ConsensusEngine {
     const isNew = node.appendBlock(block)
 
     if (isNew) {
+      const currentHead = node.headId
+      const currentHeight = node.getHeight(currentHead)
+
+      // Check if this creates a competing fork at the same height
+      if (block.height === currentHeight && block.parentId === node.getBlock(currentHead).parentId) {
+        console.log(`${node.id}: 🍴 Competing block ${block.shortId()} at height ${block.height} (keeping current head ${currentHead.slice(0, 8)})`)
+      } else {
+        console.log(`${node.id}: Added block ${block.shortId()} at height ${block.height}`)
+      }
+
       // Apply fork choice rule (longest chain)
       this.applyForkChoice(node)
+
+      if (node.headId !== currentHead) {
+        console.log(`${node.id}: ⚡ Switched to longer chain, new head: ${node.headId.slice(0, 8)} at height ${node.getHeight(node.headId)}`)
+      }
 
       // Reset mining progress if this block is at or above our current mining height
       const state = node.consensusState
@@ -112,14 +122,13 @@ export class PoWConsensus extends ConsensusEngine {
       // Update finality
       this.updateFinality(node)
 
-      // Re-gossip the block with delay
-      setTimeout(() => {
-        network.broadcast(node.id, MessageType.BLOCK_PROPOSE, { block: block.toJSON() })
-      }, network.getDelay()*8)
+      // Re-gossip the block (exclude the sender)
+      network.broadcast(node.id, MessageType.BLOCK_PROPOSE, { block: block.toJSON() }, msg.from)
     }
   }
 
   onTick(node, now, network) {
+    
     const state = node.consensusState
 
     // Clear block mined flag after animation duration (800ms)
@@ -166,7 +175,7 @@ export class PoWConsensus extends ConsensusEngine {
 
       // Check if valid PoW
       if (this.isValidPoW(block)) {
-        console.log(`Node ${node.id}: Mined block ${block.shortId()} at height ${block.height} with ${pendingTxs.length} txs in ${state.currentNonce} trials`)
+        console.log(`Node ${node.id}: ⛏️ Mined block ${block.shortId()} at height ${block.height} (${state.currentNonce} attempts)`)
 
         // Add block locally
         node.appendBlock(block)
@@ -194,10 +203,9 @@ export class PoWConsensus extends ConsensusEngine {
   }
 
   applyForkChoice(node) {
-    // Longest chain rule (with tie-breaker: lowest hash)
+    // Longest chain rule - only switch if a chain is strictly longer
     let bestId = node.headId
     let bestHeight = node.getHeight(bestId)
-    let bestHash = bestId
 
     for (const [blockId, block] of node.blockStore) {
       // Check if this is a chain tip (no children)
@@ -211,11 +219,10 @@ export class PoWConsensus extends ConsensusEngine {
 
       if (!isHead) continue
 
-      if (block.height > bestHeight ||
-          (block.height === bestHeight && blockId < bestHash)) {
+      // Only switch if this chain is strictly longer
+      if (block.height > bestHeight) {
         bestId = blockId
         bestHeight = block.height
-        bestHash = blockId
       }
     }
 
