@@ -34,14 +34,14 @@ export class Block {
 
   static genesis() {
     const genesis = new Block({
-      parentId: '0'.repeat(32),
+      parentId: '0'.repeat(8),
       height: 0,
       producerId: 'genesis',
       round: 0,
       txIds: [],
       proof: { type: 'genesis' }
     })
-    genesis.id = '0'.repeat(32)
+    genesis.id = '0'.repeat(8)
     genesis.timestamp = 0
     return genesis
   }

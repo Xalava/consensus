@@ -78,6 +78,9 @@ class App {
     // Handle selection
     this.renderer.onSelect = (selection) => {
       this.inspector.setSelected(selection)
+      // Toggle mobile bottom sheet
+      const container = this.elements.inspector.parentElement
+      container.classList.toggle('open', selection !== null)
     }
 
     // Handle connection completed - exit connect mode
@@ -92,20 +95,23 @@ class App {
     // Handle window resize
     window.addEventListener('resize', () => this.resizeCanvas())
 
-    // Track mouse for connection drawing
+    // Track mouse/touch for connection drawing
     this.canvas.addEventListener('mousemove', (e) => this.renderer.trackMouse(e))
+    this.canvas.addEventListener('touchmove', (e) => {
+      this.renderer.trackMouse({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY })
+    })
   }
 
   resizeCanvas() {
     const container = this.canvas.parentElement
     const width = container.clientWidth
     const height = container.clientHeight
-    
-    this.canvas.width = width
-    this.canvas.height = height
-    
+
     if (this.renderer) {
       this.renderer.resize(width, height)
+    } else {
+      this.canvas.width = width
+      this.canvas.height = height
     }
   }
 
@@ -127,6 +133,7 @@ class App {
       if (node) {
         this.simulation.removeNode(nodeId)
         this.inspector.setSelected(null)
+        this.elements.inspector.parentElement.classList.remove('open')
         this.showNotification(`Removed ${node.name}`)
       }
     }
@@ -136,6 +143,7 @@ class App {
       if (wallet) {
         this.simulation.removeWallet(walletId)
         this.inspector.setSelected(null)
+        this.elements.inspector.parentElement.classList.remove('open')
         this.showNotification(`Removed ${wallet.name}`)
       }
     }
@@ -168,13 +176,14 @@ class App {
       this.simulation.reset()
       this.createInitialNetwork()
       this.inspector.setSelected(null)
-      this.updatePlayPauseStatus(false)
+      this.elements.inspector.parentElement.classList.remove('open')
+      // this.updatePlayPauseStatus(false)
     })
     
     // Add Node button
     this.elements.addNodeBtn?.addEventListener('click', () => {
-      const x = 100 + Math.random() * (this.canvas.width - 200)
-      const y = 100 + Math.random() * (this.canvas.height - 200)
+      const x = 100 + Math.random() * (this.renderer.width - 200)
+      const y = 100 + Math.random() * (this.renderer.height - 200)
       const node = this.simulation.addNode(x, y)
       this.showNotification(`Added ${node.name}`)
     })
@@ -182,7 +191,7 @@ class App {
     // Add Wallet button
     this.elements.addWalletBtn?.addEventListener('click', () => {
       const x = 50 + Math.random() * 150
-      const y = 100 + Math.random() * (this.canvas.height - 200)
+      const y = 100 + Math.random() * (this.renderer.height - 200)
       const wallet = this.simulation.addWallet(x, y)
       this.showNotification(`Added ${wallet.name}`)
     })
@@ -270,8 +279,8 @@ class App {
 
   createInitialNetwork() {
     // Create some initial nodes in a nice arrangement
-    const centerX = this.canvas.width / 2
-    const centerY = this.canvas.height / 2
+    const centerX = this.renderer.width / 2
+    const centerY = this.renderer.height / 2
     const radius = 180
     
     // Create 4 nodes
@@ -295,7 +304,7 @@ class App {
 
     // Create 2 wallets
     const wallet1 = this.simulation.addWallet(centerX / 2, centerY / 3, 1000)
-    const wallet2 = this.simulation.addWallet(this.canvas.width - centerX / 2, centerY / 2, 500)
+    const wallet2 = this.simulation.addWallet(this.renderer.width - centerX / 2, centerY / 2, 500)
     
     // Connect wallets to nodes
     this.simulation.connectWalletToNode(wallet1.id, nodeIds[0])

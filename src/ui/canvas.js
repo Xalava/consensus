@@ -7,10 +7,11 @@ export class CanvasRenderer {
     this.canvas = canvas
     this.ctx = canvas.getContext('2d')
     this.simulation = simulation
-    
-    // Rendering state
-    this.width = canvas.width
-    this.height = canvas.height
+
+    // Rendering state (set by resize)
+    this.width = 0
+    this.height = 0
+    this.resize(canvas.width, canvas.height)
     
     // Interaction state
     this.dragging = null
@@ -18,6 +19,12 @@ export class CanvasRenderer {
     this.connecting = null
     this.hovering = null
     this.selected = null
+
+    // Pan state
+    this.panX = 0
+    this.panY = 0
+    this.panning = false
+    this.panStart = { x: 0, y: 0 }
     
     // Mode
     this.mode = 'select'
@@ -117,8 +124,10 @@ export class CanvasRenderer {
   resize(width, height) {
     this.width = width
     this.height = height
-    this.canvas.width = width
-    this.canvas.height = height
+    const dpr = window.devicePixelRatio || 1
+    this.canvas.width = width * dpr
+    this.canvas.height = height * dpr
+    this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0)
   }
 
   setupEvents() {
@@ -126,9 +135,39 @@ export class CanvasRenderer {
     this.canvas.addEventListener('mousemove', (e) => this.onMouseMove(e))
     this.canvas.addEventListener('mouseup', (e) => this.onMouseUp(e))
     this.canvas.addEventListener('dblclick', (e) => this.onDoubleClick(e))
+
+    // Touch events for drag support (taps already synthesize mouse events)
+    const touchPos = (e) => ({ clientX: e.touches[0].clientX, clientY: e.touches[0].clientY })
+    let lastTap = 0
+    this.canvas.addEventListener('touchstart', (e) => {
+      e.preventDefault()
+      const now = Date.now()
+      if (now - lastTap < 300) {
+        this.onDoubleClick(touchPos(e))
+      }
+      lastTap = now
+      this.onMouseDown(touchPos(e))
+    }, { passive: false })
+    this.canvas.addEventListener('touchmove', (e) => {
+      e.preventDefault()
+      this.onMouseMove(touchPos(e))
+    }, { passive: false })
+    this.canvas.addEventListener('touchend', (e) => {
+      e.preventDefault()
+      const t = e.changedTouches[0]
+      this.onMouseUp({ clientX: t.clientX, clientY: t.clientY })
+    }, { passive: false })
   }
 
   getMousePos(e) {
+    const rect = this.canvas.getBoundingClientRect()
+    return {
+      x: e.clientX - rect.left - this.panX,
+      y: e.clientY - rect.top - this.panY
+    }
+  }
+
+  getScreenPos(e) {
     const rect = this.canvas.getBoundingClientRect()
     return {
       x: e.clientX - rect.left,
@@ -185,16 +224,27 @@ export class CanvasRenderer {
       if (this.onSelect) {
         this.onSelect(null)
       }
+      // Start panning
+      const screen = this.getScreenPos(e)
+      this.panning = true
+      this.panStart = { x: screen.x - this.panX, y: screen.y - this.panY }
     }
   }
 
   onMouseMove(e) {
+    if (this.panning) {
+      const screen = this.getScreenPos(e)
+      this.panX = screen.x - this.panStart.x
+      this.panY = screen.y - this.panStart.y
+      return
+    }
+
     const pos = this.getMousePos(e)
-    
+
     if (this.dragging) {
       const newX = pos.x - this.dragOffset.x
       const newY = pos.y - this.dragOffset.y
-      
+
       if (this.dragging.type === 'node') {
         const node = this.simulation.nodes.get(this.dragging.id)
         if (node) {
@@ -211,6 +261,9 @@ export class CanvasRenderer {
     }
 
     this.hovering = this.findEntityAt(pos)
+    if (this.mode === 'select') {
+      this.canvas.style.cursor = this.hovering ? 'pointer' : 'default'
+    }
   }
 
   onMouseUp(e) {
@@ -241,6 +294,7 @@ export class CanvasRenderer {
     }
 
     this.dragging = null
+    this.panning = false
   }
 
   onDoubleClick(e) {
@@ -268,6 +322,10 @@ export class CanvasRenderer {
     bgGradient.addColorStop(1, '#1E293B')
     ctx.fillStyle = bgGradient
     ctx.fillRect(0, 0, this.width, this.height)
+
+    // Apply pan offset for world-space drawing
+    ctx.save()
+    ctx.translate(this.panX, this.panY)
 
     // Draw subtle grid
     this.drawGrid()
@@ -308,7 +366,9 @@ export class CanvasRenderer {
       }
     }
 
-    // Draw legend
+    ctx.restore()
+
+    // Draw legend (screen-space, not affected by pan)
     this.drawLegend(state.consensusType)
   }
 
@@ -318,18 +378,23 @@ export class CanvasRenderer {
     ctx.lineWidth = 1
 
     const gridSize = 80
-    
-    for (let x = 0; x < this.width; x += gridSize) {
+    // Visible world-space bounds
+    const x0 = Math.floor(-this.panX / gridSize) * gridSize
+    const y0 = Math.floor(-this.panY / gridSize) * gridSize
+    const x1 = x0 + this.width + gridSize
+    const y1 = y0 + this.height + gridSize
+
+    for (let x = x0; x <= x1; x += gridSize) {
       ctx.beginPath()
-      ctx.moveTo(x, 0)
-      ctx.lineTo(x, this.height)
+      ctx.moveTo(x, y0)
+      ctx.lineTo(x, y1)
       ctx.stroke()
     }
 
-    for (let y = 0; y < this.height; y += gridSize) {
+    for (let y = y0; y <= y1; y += gridSize) {
       ctx.beginPath()
-      ctx.moveTo(0, y)
-      ctx.lineTo(this.width, y)
+      ctx.moveTo(x0, y)
+      ctx.lineTo(x1, y)
       ctx.stroke()
     }
   }
@@ -603,7 +668,7 @@ export class CanvasRenderer {
     ctx.font = 'bold 24px Inter, system-ui, sans-serif'
     ctx.textAlign = 'center'
     ctx.textBaseline = 'middle'
-    ctx.fillText(node.id.replace('n-', ''), node.x, node.y - 5)
+    ctx.fillText(node.id, node.x, node.y - 5)
 
     ctx.font = '10px Inter, system-ui, sans-serif'
     ctx.fillStyle = roleColor

@@ -81,13 +81,13 @@ export class PoWConsensus extends ConsensusEngine {
 
     // Validate PoW
     if (!this.isValidPoW(block)) {
-      console.log(`${node.id}: Invalid PoW for block ${block.shortId()}`)
+      console.log(`N${node.id}: Invalid PoW for block ${block.shortId()}`)
       return
     }
 
     // Check if we have the parent
     if (!node.blockStore.has(block.parentId)) {
-      console.log(`${node.id}: Missing parent ${block.parentId.slice(0, 8)} for block ${block.shortId()}`)
+      console.log(`N${node.id}: Missing parent ${block.parentId.slice(0, 8)} for block ${block.shortId()}`)
       return
     }
 
@@ -100,16 +100,16 @@ export class PoWConsensus extends ConsensusEngine {
 
       // Check if this creates a competing fork at the same height
       if (block.height === currentHeight && block.parentId === node.getBlock(currentHead).parentId) {
-        console.log(`${node.id}: 🍴 Competing block ${block.shortId()} at height ${block.height} (keeping current head ${currentHead.slice(0, 8)})`)
+        console.log(`N${node.id}: 🍴 Competing block ${block.shortId()} at height ${block.height} (keeping current head ${currentHead.slice(0, 8)})`)
       } else {
-        console.log(`${node.id}: Added block ${block.shortId()} at height ${block.height}`)
+        console.log(`N${node.id}: Added block ${block.shortId()} at height ${block.height}`)
       }
 
       // Apply fork choice rule (longest chain)
       this.applyForkChoice(node)
 
       if (node.headId !== currentHead) {
-        console.log(`${node.id}: ⚡ Switched to longer chain, new head: ${node.headId.slice(0, 8)} at height ${node.getHeight(node.headId)}`)
+        console.log(`N${node.id}: ⚡ Switched to longer chain, new head: ${node.headId.slice(0, 8)} at height ${node.getHeight(node.headId)}`)
       }
 
       // Reset mining progress if this block is at or above our current mining height
@@ -175,7 +175,7 @@ export class PoWConsensus extends ConsensusEngine {
 
       // Check if valid PoW
       if (this.isValidPoW(block)) {
-        console.log(`Node ${node.id}: ⛏️ Mined block ${block.shortId()} at height ${block.height} (${state.currentNonce} attempts)`)
+        console.log(`N${node.id}: ⛏️ Mined block ${block.shortId()} at height ${block.height} (${state.currentNonce} attempts)`)
 
         // Add block locally
         node.appendBlock(block)
@@ -272,7 +272,7 @@ export class PoWConsensus extends ConsensusEngine {
   }
 
   getRole(node) {
-    return node.consensusState.mining ? 'Miner 👷' : 'Node'
+    return node.consensusState.mining ? 'Miner 👷' : ''
   }
 
   isFinalized(node, blockId) {

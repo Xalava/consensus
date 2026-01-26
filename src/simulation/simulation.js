@@ -80,7 +80,7 @@ export class Simulation {
 
   // Add a new node
   addNode(x = 300, y = 300) {
-    const id = `n-${++this.nodeCounter}`
+    const id = `${++this.nodeCounter}`
     const node = new Node(id)
     node.x = x
     node.y = y

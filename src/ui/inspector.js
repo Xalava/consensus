@@ -44,14 +44,14 @@ export class Inspector {
   renderNodeInspector() {
     const node = this.simulation.nodes.get(this.selected.id)
     if (!node) return
-    
+
     const state = this.simulation.getState()
     const nodeState = state.nodes.find(n => n.id === node.id)
     if (!nodeState) return
-    
+
     const consensusType = this.simulation.consensusType
     const consensusState = nodeState.consensusState || {}
-    
+
     // Get mempool transactions
     const mempoolTxs = Array.from(node.mempool.values()).slice(0, 5)
 
@@ -84,46 +84,30 @@ export class Inspector {
 
     // Get top 5 heights, sorted descending
     const heights = Array.from(blocksByHeight.keys()).sort((a, b) => b - a).slice(0, 5)
-    
+
     let consensusPanel = ''
-    
+
     switch (consensusType) {
       case 'pow':
         consensusPanel = this.renderPoWPanel(node, consensusState)
         break
-        case 'pos':
+      case 'pos':
         consensusPanel = this.renderPoSPanel(node, consensusState)
         break
-        case 'raft':
+      case 'raft':
         consensusPanel = this.renderRaftPanel(node, consensusState)
         break
-        case 'pbft':
+      case 'pbft':
         consensusPanel = this.renderPBFTPanel(node, consensusState)
         break
-      }
+    }
 
     this.container.innerHTML = `
       <div class="inspector-content">
-        <h3>⭕ ${node.name}</h3>
-        <div class="inspector-section">
-          <div class="badge role-${nodeState.role.toLowerCase()}">${nodeState.role}</div>
-        </div>
-
-        <div class="inspector-section">
-          <h4>Chain State</h4>
-          <div class="stat-row">
-            <span class="stat-label">Head Height:</span>
-            <span class="stat-value">${nodeState.headHeight}</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Finalized Height:</span>
-            <span class="stat-value">${nodeState.finalizedHeight}</span>
-          </div>
-          <div class="stat-row">
-            <span class="stat-label">Head Block:</span>
-            <span class="stat-value mono">${headBlock?.id || 'genesis'}</span>
-          </div>
-        </div>
+        <h3>
+          ⚪ ${node.name}
+          <span class="badge role-${nodeState.role.toLowerCase()}">${nodeState.role}</span>
+        </h3>
 
         ${consensusPanel}
 
@@ -144,21 +128,21 @@ export class Inspector {
           <h4>📦 Recent Blocks</h4>
           <div class="block-list-rows">
             ${heights.length > 0 ? heights.map(height => {
-              const { main, orphan } = blocksByHeight.get(height)
-              const isFinalized = height <= nodeState.finalizedHeight
+      const { main, orphan } = blocksByHeight.get(height)
+      const isFinalized = height <= nodeState.finalizedHeight
 
-              const renderChip = (block, isOrphan) => {
-                if (!block) return ''
-                const txCount = block.transactions?.length || block.txIds?.length || 0
-                const status = isOrphan ? 'orphan' : (isFinalized ? 'finalized' : 'unconfirmed')
-                const icon = isOrphan ? '✗' : (isFinalized ? '✓' : '⏳')
-                const txList = (block.transactions || []).map(tx => '• '+ tx.id + '\n   ('+tx.from.slice(0,6)+ '→' + tx.to.slice(0,6) + ': ' + tx.amount + ')').join('\n')
-                const tooltip = 'ID: ' + block.id + '&#10;Producer: ' + block.producerId + '&#10;Status: ' + status + '&#10;Txs: ' + '\n'+ (txList ? txList : '') + '&#10;Parent: ' + block.parentId.slice(0,8)
-                return '<span class="block-chip ' + status + '" title="' + tooltip + '">' + block.id.slice(0, 8) + ' ' + icon + '</span>'
-              }
+      const renderChip = (block, isOrphan) => {
+        if (!block) return ''
+        const txCount = block.transactions?.length || block.txIds?.length || 0
+        const status = isOrphan ? 'orphan' : (isFinalized ? 'finalized' : 'unconfirmed')
+        const icon = isOrphan ? '✗' : (isFinalized ? '✓' : '⏳')
+        const txList = (block.transactions || []).map(tx => '• ' + tx.id + '\n   (' + tx.from.slice(0, 6) + '→' + tx.to.slice(0, 6) + ': ' + tx.amount + ')').join('\n')
+        const blockTooltip = 'ID: ' + block.id + '&#10;Producer: N' + block.producerId + '&#10;Status: ' + status + '&#10;Txs: ' + '\n' + (txList ? txList : '') + '&#10;Parent: ' + block.parentId + '&#10;Nonce: ' + block.proof.nonce
+        return '<span class="block-chip ' + status + '" title="' + blockTooltip + '">' + block.id.slice(0, 8) + ' ' + icon + '</span>'
+      }
 
-              return '<div class="block-row"><span class="block-height">#' + height + '</span><div class="block-chips">' + renderChip(main, false) + renderChip(orphan, true) + '</div></div>'
-            }).join('') : '<div class="empty">No blocks yet</div>'}
+      return '<div class="block-row"><span class="block-height">#' + height + '</span><div class="block-chips">' + renderChip(main, false) + renderChip(orphan, true) + '</div></div>'
+    }).join('') : '<div class="empty">No blocks yet</div>'}
           </div>
         </div>
 
@@ -167,7 +151,7 @@ export class Inspector {
           <div class="peer-list">
             ${Array.from(node.peers).map(peerId => `
               <span class="peer-badge" data-peer-id="${peerId}">
-                ${peerId.replace('n-', 'N')}
+                N${peerId}
                 <button class="peer-disconnect" data-peer-id="${peerId}" title="Disconnect">×</button>
               </span>
             `).join('')}
@@ -180,7 +164,7 @@ export class Inspector {
         </div>
       </div>
     `
-    
+
     // Attach event handlers
     this.attachNodeEventHandlers(node)
   }
@@ -191,32 +175,31 @@ export class Inspector {
       <div class="inspector-section consensus-panel">
         <h4>⛏️ Proof of Work</h4>
 
+        <div class="stat-row" title="Level of challenge of the cryptographic puzzle" >
+          <span class="stat-label">Difficulty:</span>
+          <span class="stat-value">${state.difficulty}</span>
+        </div>
+        <div class="stat-row" title="Number of blocks waited before considering a transaction final">
+          <span class="stat-label">Confirmations:</span>
+          <span class="stat-value">${state.confirmations}</span>
+        </div>
+        
         <h5>Node status</h5>
         <div class="stat-row">
           <span class="stat-label">Mining:</span>
           <label class="switch">
-            <input type="checkbox" id="mining-toggle" ${state.mining ? 'checked' : ''}>
-            <span class="slider"></span>
+          <input type="checkbox" id="mining-toggle" ${state.mining ? 'checked' : ''}>
+          <span class="slider"></span>
           </label>
         </div>
         <div class="stat-row">
           <span class="stat-label">Status:</span>
           <span class="stat-value ${state.isMiningActive ? 'highlight' : ''}">${miningStatus}</span>
         </div>
-        <div class="stat-row">
+        <div class="stat-row" title="Number of hash calculated per cycle">
           <span class="stat-label">Hash Power:</span>
           <span class="stat-value mono">${state.hashPower}</span>
-        </div>
-
-        <h5>Global parameters</h5>
-        <div class="stat-row">
-          <span class="stat-label">Difficulty:</span>
-          <span class="stat-value">${state.difficulty}</span>
-        </div>
-        <div class="stat-row">
-          <span class="stat-label">Confirmations:</span>
-          <span class="stat-value">${state.confirmations}</span>
-        </div>
+        </div>    
       </div>
     `
   }
@@ -224,7 +207,7 @@ export class Inspector {
   renderPoSPanel(node, state) {
     return `
       <div class="inspector-section consensus-panel">
-        <h4>🪙 Proof of Stake</h4>
+        <h4>🪙 Proof of Stake (WIP)</h4>
         <div class="stat-row">
           <span class="stat-label">Validator:</span>
           <label class="switch">
@@ -247,7 +230,7 @@ export class Inspector {
         </div>
         <div class="stat-row">
           <span class="stat-label">Current Leader:</span>
-          <span class="stat-value">${state.currentLeader?.replace('n-', 'N') || '-'}</span>
+          <span class="stat-value">${state.currentLeader != null ? 'N' + state.currentLeader : '-'}</span>
         </div>
       </div>
     `
@@ -267,7 +250,7 @@ export class Inspector {
         </div>
         <div class="stat-row">
           <span class="stat-label">Leader:</span>
-          <span class="stat-value">${state.leaderId?.replace('n-', 'N') || 'None'}</span>
+          <span class="stat-value">${state.leaderId != null ? 'N' + state.leaderId : 'None'}</span>
         </div>
         <div class="stat-row">
           <span class="stat-label">Commit Index:</span>
@@ -321,7 +304,7 @@ export class Inspector {
   attachNodeEventHandlers(node) {
     const consensus = this.simulation.consensus
     if (!consensus) return
-    
+
     // Mining toggle (PoW)
     const miningToggle = document.getElementById('mining-toggle')
     if (miningToggle) {
@@ -402,7 +385,7 @@ export class Inspector {
   renderWalletInspector() {
     const wallet = this.simulation.wallets.get(this.selected.id)
     if (!wallet) return
-    
+
     // Get balance from connected node
     let balance = wallet.initialBalance
     if (wallet.connectedNodeId) {
@@ -415,7 +398,7 @@ export class Inspector {
     // Get other wallet addresses for transaction form
     const otherAddresses = this.simulation.getAddresses()
       .filter(a => a.id !== wallet.id)
-      
+
     this.container.innerHTML = `
       <div class="inspector-content">
         <h3>💰 ${wallet.name}</h3>
@@ -436,7 +419,7 @@ export class Inspector {
           </div>
           <div class="stat-row">
             <span class="stat-label">Connected to:</span>
-            <span class="stat-value">${wallet.connectedNodeId?.replace('n-', 'Node ') || 'Not connected'}</span>
+            <span class="stat-value">${wallet.connectedNodeId != null ? 'Node ' + wallet.connectedNodeId : 'Not connected'}</span>
           </div>
         </div>
 
@@ -484,7 +467,7 @@ export class Inspector {
         </div>
       </div>
     `
-    
+
     // Attach send form handler
     const form = document.getElementById('send-tx-form')
     if (form) {

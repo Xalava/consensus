@@ -5,12 +5,14 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>Consensus SandBox</title>
   <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="/icon.svg" type="image/svg+xml">
 </head>
 <body>
   <div class="app-container">
     <!-- Header / Toolbar -->
     <header class="toolbar">
       <div class="toolbar-left">
+        <img src="./icon.svg" class="logo-img"/>
         <h1 class="logo">Consensus Sandbox</h1>
         <span id="status-indicator" class="status-indicator paused">Paused</span>
       </div>
@@ -41,7 +43,7 @@
         <div class="control-group">
           <label for="speed-slider">Speed:</label>
           <input type="range" id="speed-slider" min="20" max="400" value="200" class="slider">
-          <span id="speed-value">0.5x</span>
+          <span id="speed-value">1x</span>
         </div>
       </div>
 
@@ -90,7 +92,7 @@
     <footer class="footer">
       <span>Consensus Sandbox v0.2</span>
       <span class="footer-divider">|</span>
-      <span>Educational visualization of distributed consensus protocols</span>
+      <span>Educational visualization of distributed consensus protocols by <a href="https://xvlv.io" class="author">Xavier Lavayssière</a> </span>
     </footer>
   </div>
 
